@@ -343,7 +343,7 @@ def nota_txt(b: dict) -> str:
         f"ID Booking    : {b['id_booking']}",
         f"Status        : {b['status_booking']}",
         f"Diterbitkan   : {b['waktu_terbit']}",
-        garis, "Tunjukkan nota ini saat datang ke studio.", "Terima kasih sudah memilih KlikStudio!", garis,
+        garis, "Terima kasih sudah memilih KlikStudio!", garis,
     ])
 
 

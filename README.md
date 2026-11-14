@@ -12,5 +12,5 @@ Hapus file itu untuk reset data. Ubah SEED_CONTOH = False di app.py kalau tidak 
 ## Struktur
 - app.py        : tampilan (Streamlit)
 - database.py   : database SQLite + aturan bisnis (slot, bentrok jadwal, status, nota)
-- assets/       : logo KlikStudio
+- assets/       : logo KlikStudio (opsional; logo cadangan dipakai jika file tidak tersedia)
 - .streamlit/config.toml : tema terang

@@ -17,7 +17,9 @@ from database import fmt_jam, rupiah, tgl_id
 ASSETS = Path(__file__).parent / "assets"
 SEED_CONTOH = True          # ubah ke False kalau tidak mau data contoh (Rina, Dimas, dst.)
 
-st.set_page_config(page_title="KlikStudio", page_icon=Image.open(ASSETS / "logo_icon_transparent.png"),
+logo_icon = ASSETS / "logo_icon_transparent.png"
+st.set_page_config(page_title="KlikStudio",
+                   page_icon=Image.open(logo_icon) if logo_icon.is_file() else "📷",
                    layout="wide", initial_sidebar_state="expanded")
 
 # ====================================================================== TEMA
@@ -130,12 +132,20 @@ button[data-baseweb="tab"][aria-selected="true"]{color:var(--accent-d)!important
   border-color:var(--line)!important;}
 [data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="base-input"]{border-radius:12px!important;}
 .foot{text-align:center; color:var(--muted); font-size:.8rem; margin-top:2.4rem;}
+.group-card{max-width:680px; margin:2.4rem auto 0; padding:1.35rem 1.6rem; background:#fff;
+  border:1px solid var(--line); border-top:3px solid var(--accent); border-radius:18px;
+  box-shadow:0 2px 14px rgba(68,67,65,.05);}
+.group-card h3{margin:0 0 .8rem; color:var(--accent-d)!important; font-size:1.05rem;}
+.group-card ol{margin:0; padding-left:1.4rem; color:var(--ink); line-height:1.9;}
+.group-card li{padding-left:.2rem;}
+.group-card .nim{color:var(--muted);}
 @media (max-width:640px){
   .hero{padding:1.35rem; gap:.7rem;}
   .hero h1{font-size:1.65rem;}
   .hero-logo img{width:140px;}
   .hero-logo{margin-left:0;}
   .metric .val{font-size:2rem;}
+  .group-card{padding:1.1rem 1.2rem;}
 }
 </style>
 """
@@ -150,7 +160,19 @@ def H(s: str):
 
 @st.cache_data(show_spinner=False)
 def img_uri(name: str) -> str:
-    return "data:image/png;base64," + base64.b64encode((ASSETS / name).read_bytes()).decode()
+    image = ASSETS / name
+    if image.is_file():
+        return "data:image/png;base64," + base64.b64encode(image.read_bytes()).decode()
+
+    wordmark = name == "logo_wordmark_transparent.png"
+    text = '<text x="90" y="58" font-family="sans-serif" font-size="38" font-weight="700" fill="#80613F">KlikStudio</text>' if wordmark else ""
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {"360" if wordmark else "72"} 72">'
+           '<rect x="4" y="16" width="64" height="48" rx="10" fill="#9C7A54"/>'
+           '<path d="M22 16l5-8h18l5 8" fill="#80613F"/>'
+           '<circle cx="36" cy="40" r="15" fill="#F3EFEA"/>'
+           '<circle cx="36" cy="40" r="8" fill="#9C7A54"/>'
+           f'{text}</svg>')
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 
 def esc(x) -> str:
@@ -210,7 +232,7 @@ def ticket_html(b: dict) -> str:
             + row("Nama", b["nama_pelanggan"]) + row("Telepon", b["no_telepon"])
             + row("Paket", f'{b["nama_paket"]} ({b["durasi_sesi"]} mnt)') + row("Harga", rupiah(b["harga"]))
             + row("Status", b["status_booking"])
-            + f'<div class="ticket-foot">ID Booking {b["id_booking"]} · Tunjukkan nota ini saat datang</div></div>')
+            + f'<div class="ticket-foot">ID Booking {b["id_booking"]}</div></div>')
 
 
 def tampil_nota(b: dict, key: str):
@@ -323,6 +345,13 @@ def page_beranda():
             body += (f"<tr><td>{esc(r[0])}</td><td>{badge(r[1])}</td><td>{esc(r[2])}</td>"
                      f"<td>{esc(r[3])}</td><td>{sb}</td></tr>")
         H(f'<div class="ktable-wrap"><table class="ktable"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>')
+
+    H('''<div class="group-card"><h3>Kelompok 7</h3><ol>
+        <li>Elvalena Destyananta <span class="nim">(NIM 4.52.24.3.08)</span></li>
+        <li>Elvira Febriani Putri <span class="nim">(NIM 4.52.24.3.09)</span></li>
+        <li>Nadilah Nur Adha <span class="nim">(NIM 4.52.24.3.19)</span></li>
+        <li>Ziyada Ilma Rizqina <span class="nim">(NIM 4.52.24.3.29)</span></li>
+    </ol></div>''')
 
 
 # ====================================================================== HALAMAN: KELOLA STUDIO
