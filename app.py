@@ -78,6 +78,9 @@ h1,h2,h3,h4,h5{color:var(--ink)!important; letter-spacing:-.01em;}
 .login-title h1{font-size:2rem; margin:.2rem 0 .35rem;}
 .login-title p{color:var(--muted); margin:0; font-size:.94rem;}
 .login-note{text-align:center; color:var(--muted); font-size:.78rem; margin-top:1rem;}
+.auth-form-title{text-align:center; margin-bottom:1.15rem;}
+.auth-form-title h2{font-size:1.3rem; margin:0 0 .3rem;}
+.auth-form-title p{color:var(--muted); font-size:.86rem; margin:0;}
 
 .page-title h1{font-size:2rem; margin:0 0 .15rem 0; font-weight:700;}
 .page-title p{color:var(--muted); margin:0 0 1.1rem 0;}
@@ -278,31 +281,72 @@ if "menu" not in st.session_state:
     st.session_state["menu"] = MENU[0]
 if "admin" not in st.session_state:
     st.session_state["admin"] = None
+if "auth_mode" not in st.session_state:
+    st.session_state["auth_mode"] = "Sign In"
+if "auth_choice" not in st.session_state:
+    st.session_state["auth_choice"] = st.session_state["auth_mode"]
 
 
 def goto(m: str):
     st.session_state["menu"] = m
 
 
+def sync_auth_mode():
+    st.session_state["auth_mode"] = st.session_state["auth_choice"]
+
+
 def page_login():
     _, kolom, _ = st.columns([1, 1.35, 1])
     with kolom:
         H(f'<div class="login-logo"><img src="{img_uri("logo_wordmark_transparent.png")}"></div>')
-        H('<div class="login-title"><h1>Login Admin</h1><p>Masuk untuk mengelola KlikStudio.</p></div>')
+        H('<div class="login-title"><h1>Akses Admin</h1><p>Pilih Sign In atau Sign Up untuk melanjutkan.</p></div>')
+        if st.session_state["auth_choice"] != st.session_state["auth_mode"]:
+            st.session_state["auth_choice"] = st.session_state["auth_mode"]
+        st.segmented_control("Pilihan akses", ["Sign In", "Sign Up"], key="auth_choice",
+                             on_change=sync_auth_mode)
+        notice = st.session_state.pop("auth_notice", None)
+        if notice:
+            {"success": st.success, "error": st.error}[notice[0]](notice[1])
         with st.container(border=True):
-            with st.form("form_login_admin"):
-                username = st.text_input("Username", key="login_username", placeholder="masukkan username admin")
-                password = st.text_input("Password", key="login_password", type="password",
-                                         placeholder="masukkan password admin")
-                if st.form_submit_button("Masuk Dashboard", type="primary"):
-                    admin = dbx.autentikasi_admin(username, password)
-                    if admin:
-                        st.session_state["admin"] = admin
-                        st.session_state["menu"] = MENU[0]
-                        st.rerun()
-                    else:
-                        st.error("Username atau password salah.")
-        H('<div class="login-note">Akses dashboard hanya untuk admin yang sudah terdaftar.</div>')
+            if st.session_state["auth_mode"] == "Sign Up":
+                H('<div class="auth-form-title"><h2>Buat Akun Admin</h2>'
+                  '<p>Daftarkan username dan password untuk mengakses dashboard.</p></div>')
+                with st.form("form_daftar_admin", clear_on_submit=True):
+                    username = st.text_input("Username", key="signup_username", max_chars=32,
+                                             placeholder="contoh: admin_studio",
+                                             help="3-32 karakter: huruf, angka, atau underscore.")
+                    password = st.text_input("Password", key="signup_password", type="password",
+                                             max_chars=128, placeholder="minimal 8 karakter")
+                    konfirmasi = st.text_input("Konfirmasi Password", key="signup_confirm", type="password",
+                                               max_chars=128, placeholder="ulangi password")
+                    if st.form_submit_button("Daftar Akun", type="primary"):
+                        if password != konfirmasi:
+                            st.error("Konfirmasi password tidak sama.")
+                        else:
+                            ok, msg = dbx.daftar_admin(username, password)
+                            if ok:
+                                st.session_state["auth_notice"] = ("success", msg)
+                                st.session_state["login_username"] = username.strip()
+                                st.session_state["auth_mode"] = "Sign In"
+                                st.rerun()
+                            else:
+                                st.error(msg)
+            else:
+                H('<div class="auth-form-title"><h2>Sign In</h2>'
+                  '<p>Masuk menggunakan akun admin yang sudah terdaftar.</p></div>')
+                with st.form("form_login_admin"):
+                    username = st.text_input("Username", key="login_username", placeholder="masukkan username admin")
+                    password = st.text_input("Password", key="login_password", type="password",
+                                             placeholder="masukkan password admin")
+                    if st.form_submit_button("Masuk Dashboard", type="primary"):
+                        admin = dbx.autentikasi_admin(username, password)
+                        if admin:
+                            st.session_state["admin"] = admin
+                            st.session_state["menu"] = MENU[0]
+                            st.rerun()
+                        else:
+                            st.error("Username atau password salah.")
+        H('<div class="login-note">Akun baru dapat dibuat melalui pilihan Sign Up.</div>')
 
 
 dbx.init_db(SEED_CONTOH)
@@ -318,8 +362,11 @@ with st.sidebar:
     st.radio("Menu", MENU, key="menu", label_visibility="collapsed")
     if st.button("Logout", key="tombol_logout", use_container_width=True):
         st.session_state["admin"] = None
-        st.session_state.pop("login_username", None)
-        st.session_state.pop("login_password", None)
+        st.session_state["auth_mode"] = "Sign In"
+        st.session_state["auth_choice"] = "Sign In"
+        st.session_state["auth_notice"] = None
+        for key in ("login_username", "login_password", "signup_username", "signup_password", "signup_confirm"):
+            st.session_state.pop(key, None)
         st.rerun()
 
 

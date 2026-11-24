@@ -151,11 +151,29 @@ def verify_password(password: str, stored: str) -> bool:
 
 def autentikasi_admin(username: str, password: str):
     username = (username or "").strip()
-    admin = one("SELECT id_admin, username, nama, password_admin FROM admin WHERE username=?",
-                (username,))
+    admin = one("SELECT id_admin, username, nama, password_admin FROM admin "
+                "WHERE username=? COLLATE NOCASE", (username,))
     if not admin or not verify_password(password or "", admin["password_admin"]):
         return None
     return {"id_admin": admin["id_admin"], "username": admin["username"], "nama": admin["nama"]}
+
+
+def daftar_admin(username: str, password: str):
+    username = (username or "").strip()
+    password = password or ""
+    if not 3 <= len(username) <= 32 or not re.fullmatch(r"[A-Za-z0-9_]+", username):
+        return False, "Username harus 3-32 karakter dan hanya boleh berisi huruf, angka, atau underscore."
+    if not 8 <= len(password) <= 128:
+        return False, "Password harus 8-128 karakter."
+    with db() as con:
+        if con.execute("SELECT 1 FROM admin WHERE username=? COLLATE NOCASE", (username,)).fetchone():
+            return False, "Username sudah terdaftar. Silakan gunakan username lain."
+        try:
+            con.execute("INSERT INTO admin (username, password_admin) VALUES (?,?)",
+                        (username, hash_password(password)))
+        except sqlite3.IntegrityError:
+            return False, "Username sudah terdaftar. Silakan gunakan username lain."
+    return True, "Akun berhasil didaftarkan. Silakan Sign In."
 
 
 def norm_phone(raw: str) -> str:
