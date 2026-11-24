@@ -52,6 +52,10 @@ h1,h2,h3,h4,h5{color:var(--ink)!important; letter-spacing:-.01em;}
 [data-testid="stSidebar"] label[data-baseweb="radio"] p{font-size:.94rem; margin:0;}
 .side-nav-label{margin:.25rem .8rem .55rem; color:var(--muted); font-size:.7rem;
   font-weight:700; letter-spacing:.12em;}
+.side-admin{margin:0 .8rem .9rem; padding:.65rem .8rem; background:rgba(255,255,255,.55);
+  border:1px solid var(--line); border-radius:12px;}
+.side-admin span{display:block; color:var(--muted); font-size:.65rem; letter-spacing:.1em; font-weight:700;}
+.side-admin b{display:block; margin-top:.15rem; color:var(--ink); font-size:.88rem;}
 
 /* ---------- hero ---------- */
 .hero{display:flex; align-items:center; justify-content:space-between; gap:1.5rem; flex-wrap:wrap;
@@ -66,6 +70,14 @@ h1,h2,h3,h4,h5{color:var(--ink)!important; letter-spacing:-.01em;}
   background:var(--cream); color:var(--muted)!important; border-radius:999px; font-size:.8rem!important;}
 .hero-logo{background:transparent; border-radius:0; padding:0; margin-left:auto;}
 .hero-logo img{width:190px; max-width:100%; height:auto; display:block;}
+
+/* ---------- login ---------- */
+.login-logo{text-align:center; margin:2.8rem auto 1.4rem; max-width:300px;}
+.login-logo img{width:100%; display:block;}
+.login-title{text-align:center; margin-bottom:1.2rem;}
+.login-title h1{font-size:2rem; margin:.2rem 0 .35rem;}
+.login-title p{color:var(--muted); margin:0; font-size:.94rem;}
+.login-note{text-align:center; color:var(--muted); font-size:.78rem; margin-top:1rem;}
 
 .page-title h1{font-size:2rem; margin:0 0 .15rem 0; font-weight:700;}
 .page-title p{color:var(--muted); margin:0 0 1.1rem 0;}
@@ -260,22 +272,55 @@ def rentang_tanggal(v):
     return v, v
 
 
-# ====================================================================== NAVIGASI
-MENU = ["🏠  Beranda", "🗓️  Kelola Studio", "📝  Booking", "🎟️  Nota Antrean"]
+# ====================================================================== NAVIGASI & AUTENTIKASI
+MENU = ["🏠  Beranda", "🗓️  Kelola Studio", "👥  Data Pelanggan", "📝  Booking", "🎟️  Nota Antrean"]
 if "menu" not in st.session_state:
     st.session_state["menu"] = MENU[0]
+if "admin" not in st.session_state:
+    st.session_state["admin"] = None
 
 
 def goto(m: str):
     st.session_state["menu"] = m
 
 
+def page_login():
+    _, kolom, _ = st.columns([1, 1.35, 1])
+    with kolom:
+        H(f'<div class="login-logo"><img src="{img_uri("logo_wordmark_transparent.png")}"></div>')
+        H('<div class="login-title"><h1>Login Admin</h1><p>Masuk untuk mengelola KlikStudio.</p></div>')
+        with st.container(border=True):
+            with st.form("form_login_admin"):
+                username = st.text_input("Username", key="login_username", placeholder="masukkan username admin")
+                password = st.text_input("Password", key="login_password", type="password",
+                                         placeholder="masukkan password admin")
+                if st.form_submit_button("Masuk Dashboard", type="primary"):
+                    admin = dbx.autentikasi_admin(username, password)
+                    if admin:
+                        st.session_state["admin"] = admin
+                        st.session_state["menu"] = MENU[0]
+                        st.rerun()
+                    else:
+                        st.error("Username atau password salah.")
+        H('<div class="login-note">Akses dashboard hanya untuk admin yang sudah terdaftar.</div>')
+
+
 dbx.init_db(SEED_CONTOH)
+if not st.session_state.get("admin"):
+    page_login()
+    st.stop()
 
 with st.sidebar:
     H(f'<div class="side-logo"><img src="{img_uri("logo_wordmark_transparent.png")}"></div>')
+    admin = st.session_state["admin"]
+    H(f'<div class="side-admin"><span>LOGIN SEBAGAI</span><b>{esc(admin["nama"] or admin["username"])}</b></div>')
     H('<div class="side-nav-label">MENU UTAMA</div>')
     st.radio("Menu", MENU, key="menu", label_visibility="collapsed")
+    if st.button("Logout", key="tombol_logout", use_container_width=True):
+        st.session_state["admin"] = None
+        st.session_state.pop("login_username", None)
+        st.session_state.pop("login_password", None)
+        st.rerun()
 
 
 # ====================================================================== HALAMAN: BERANDA
@@ -482,6 +527,51 @@ def page_kelola():
         tab_paket()
 
 
+# ====================================================================== HALAMAN: DATA PELANGGAN
+def page_pelanggan():
+    judul("Data Pelanggan", "Data master pelanggan: tambah, ubah, atau hapus nama dan nomor telepon.")
+    show_flash()
+
+    cari = st.text_input("Cari pelanggan", placeholder="nama atau nomor telepon...", key="pl_cari")
+    daftar = dbx.list_pelanggan(cari.strip())
+    sect("Daftar pelanggan", f"{len(daftar)} pelanggan")
+    tabel(["ID", "Nama", "Nomor Telepon", "Booking"],
+          [[p["id_pelanggan"], p["nama_pelanggan"], p["no_telepon"], p["jml_booking"]] for p in daftar],
+          kosong="Pelanggan tidak ditemukan." if cari.strip() else "Belum ada data pelanggan.")
+
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        sect("Tambah pelanggan")
+        with st.form("form_pelanggan", clear_on_submit=True):
+            nama = st.text_input("Nama pelanggan", placeholder="contoh: Rina Amelia")
+            telepon = st.text_input("Nomor telepon", placeholder="contoh: 081234567890")
+            if st.form_submit_button("Simpan Pelanggan", type="primary"):
+                ok, msg = dbx.simpan_pelanggan(nama, telepon)
+                flash("success" if ok else "error", msg)
+                st.rerun()
+    with c2:
+        sect("Ubah / hapus pelanggan")
+        if daftar:
+            ids = [p["id_pelanggan"] for p in daftar]
+            pid = st.selectbox("Pilih pelanggan", ids, key=f"pl_pilih_{hash(tuple(ids))}",
+                               format_func=lambda i: next(
+                                   f"{p['nama_pelanggan']} · {p['no_telepon']}"
+                                   for p in daftar if p["id_pelanggan"] == i))
+            p = next(p for p in daftar if p["id_pelanggan"] == pid)
+            with st.container(border=True):
+                n2 = st.text_input("Nama", value=p["nama_pelanggan"], key=f"pl_n_{pid}")
+                tp = st.text_input("Nomor telepon", value=p["no_telepon"], key=f"pl_t_{pid}")
+                e1, e2 = st.columns(2)
+                if e1.button("💾 Simpan", key=f"pl_s_{pid}", type="primary"):
+                    ok, msg = dbx.simpan_pelanggan(n2, tp, pid)
+                    flash("success" if ok else "error", msg)
+                    st.rerun()
+                if e2.button("🗑️ Hapus", key=f"pl_x_{pid}"):
+                    ok, msg = dbx.hapus_pelanggan(pid)
+                    flash("success" if ok else "error", msg)
+                    st.rerun()
+
+
 # ====================================================================== HALAMAN: BOOKING
 def cb_simpan(konfirmasi: bool):
     """Dipanggil sebagai callback tombol supaya form bisa di-reset setelah tersimpan."""
@@ -648,4 +738,5 @@ def page_nota():
 
 
 # ====================================================================== ROUTER
-{MENU[0]: page_beranda, MENU[1]: page_kelola, MENU[2]: page_booking, MENU[3]: page_nota}[st.session_state["menu"]]()
+{MENU[0]: page_beranda, MENU[1]: page_kelola, MENU[2]: page_pelanggan,
+ MENU[3]: page_booking, MENU[4]: page_nota}[st.session_state["menu"]]()

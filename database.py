@@ -6,13 +6,18 @@ Berisi 6 entitas sesuai ERD: ADMIN, PELANGGAN, PAKET_FOTO, JADWAL_STUDIO,
 BOOKING, dan NOTA_ANTREAN (+ tabel kecil PENGATURAN untuk jam operasional).
 File ini TIDAK memakai Streamlit, jadi aturan bisnis bisa diuji terpisah.
 """
+import hashlib
+import hmac
 import re
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "klikstudio_app.db"
+PASSWORD_ITERATIONS = 260_000
+DEFAULT_ADMIN_PASSWORD = "12345678"
 
 # ------------------------------------------------------------------ konstanta
 STATUS_BOOKING = ["Menunggu", "Dikonfirmasi", "Selesai", "Dibatalkan"]
@@ -123,6 +128,34 @@ def tgl_id(iso: str) -> str:
 
 def hari_tgl_id(d: date) -> str:
     return f"{HARI[d.weekday()]}, {d.day} {BULAN[d.month - 1]} {d.year}"
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"),
+                                 bytes.fromhex(salt), PASSWORD_ITERATIONS)
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        algoritma, iterasi, salt, expected = stored.split("$", 3)
+        if algoritma != "pbkdf2_sha256":
+            return False
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"),
+                                     bytes.fromhex(salt), int(iterasi))
+        return hmac.compare_digest(digest.hex(), expected)
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def autentikasi_admin(username: str, password: str):
+    username = (username or "").strip()
+    admin = one("SELECT id_admin, username, nama, password_admin FROM admin WHERE username=?",
+                (username,))
+    if not admin or not verify_password(password or "", admin["password_admin"]):
+        return None
+    return {"id_admin": admin["id_admin"], "username": admin["username"], "nama": admin["nama"]}
 
 
 def norm_phone(raw: str) -> str:
@@ -315,6 +348,47 @@ def _validasi_pelanggan(nama: str, telepon: str):
     return None
 
 
+def list_pelanggan(cari: str = ""):
+    sql = """SELECT p.id_pelanggan, p.nama_pelanggan, p.no_telepon,
+                    COUNT(b.id_booking) AS jml_booking
+             FROM pelanggan p LEFT JOIN booking b ON b.id_pelanggan = p.id_pelanggan"""
+    params = ()
+    if cari:
+        sql += " WHERE p.nama_pelanggan LIKE ? OR p.no_telepon LIKE ?"
+        params = (f"%{cari}%", f"%{cari}%")
+    return rows(sql + " GROUP BY p.id_pelanggan ORDER BY p.nama_pelanggan COLLATE NOCASE", params)
+
+
+def simpan_pelanggan(nama: str, telepon: str, id_pelanggan: int = None):
+    nama, telepon = (nama or "").strip(), norm_phone(telepon)
+    err = _validasi_pelanggan(nama, telepon)
+    if err:
+        return False, err
+    with db() as con:
+        pemakai = con.execute("SELECT id_pelanggan FROM pelanggan WHERE no_telepon=?",
+                              (telepon,)).fetchone()
+        if pemakai and pemakai["id_pelanggan"] != id_pelanggan:
+            return False, "Nomor telepon sudah dipakai pelanggan lain."
+        if id_pelanggan:
+            if not con.execute("SELECT 1 FROM pelanggan WHERE id_pelanggan=?",
+                               (id_pelanggan,)).fetchone():
+                return False, "Pelanggan tidak ditemukan."
+            con.execute("UPDATE pelanggan SET nama_pelanggan=?, no_telepon=? WHERE id_pelanggan=?",
+                        (nama, telepon, id_pelanggan))
+            return True, "Data pelanggan diperbarui."
+        con.execute("INSERT INTO pelanggan (nama_pelanggan, no_telepon) VALUES (?,?)",
+                    (nama, telepon))
+    return True, "Pelanggan ditambahkan."
+
+
+def hapus_pelanggan(id_pelanggan: int):
+    with db() as con:
+        if con.execute("SELECT 1 FROM booking WHERE id_pelanggan=?", (id_pelanggan,)).fetchone():
+            return False, "Pelanggan punya riwayat booking, tidak bisa dihapus."
+        con.execute("DELETE FROM pelanggan WHERE id_pelanggan=?", (id_pelanggan,))
+    return True, "Pelanggan dihapus."
+
+
 # ------------------------------------------------------------------ nota
 def terbitkan_nota(con, id_booking: int) -> int:
     ada = con.execute("SELECT id_nota FROM nota_antrean WHERE id_booking=?", (id_booking,)).fetchone()
@@ -467,9 +541,11 @@ def hapus_paket(id_paket: int):
 def init_db(seed_contoh: bool = True):
     with db() as con:
         con.executescript(SCHEMA)
-        # Tidak ada login: satu admin bawaan dipakai sebagai pencatat booking (FK id_admin).
         if con.execute("SELECT COUNT(*) FROM admin").fetchone()[0] == 0:
-            con.execute("INSERT INTO admin (username, password_admin, nama) VALUES ('admin','-','Admin KlikStudio')")
+            con.execute("INSERT INTO admin (username, password_admin, nama) VALUES ('admin',?,'Admin KlikStudio')",
+                        (hash_password(DEFAULT_ADMIN_PASSWORD),))
+        con.execute("UPDATE admin SET password_admin=? WHERE username='admin' AND password_admin='-'",
+                    (hash_password(DEFAULT_ADMIN_PASSWORD),))
         if con.execute("SELECT COUNT(*) FROM paket_foto").fetchone()[0] == 0:
             con.executemany("INSERT INTO paket_foto (nama_paket, durasi_sesi, harga) VALUES (?,?,?)",
                             [("Paket Solo", 30, 150000), ("Paket Couple", 60, 300000),
