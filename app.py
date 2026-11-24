@@ -5,6 +5,7 @@ Jalankan:  streamlit run app.py
 """
 import base64
 import html
+import importlib
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -12,6 +13,8 @@ import streamlit as st
 from PIL import Image
 
 import database as dbx
+# Streamlit bisa mempertahankan modul database lama saat hot reload.
+importlib.reload(dbx)
 from database import fmt_jam, rupiah, tgl_id
 
 ASSETS = Path(__file__).parent / "assets"
